@@ -4,7 +4,35 @@ This Python library is a conversion and modification from the original Ruby impl
 
 The original Ruby code is available here at goshrine. The python conversion this is based on is available at https://github.com/pfmonville/whole_history_rating.
 
-## Installation
+## What is an Whole History Rating?
+
+Whole History Rating (WHR) was originally designed by [Rémi Coulom](https://www.remi-coulom.fr/WHR/) as new version of ELO ratings.
+
+#### What is an ELO rating system?
+[ELO](https://en.wikipedia.org/wiki/Elo_rating_system) was designed by Arpad Elo has a way to rank chess players. In brief:
+- Players have scores that reflect how "likely" a player is to win relative to their opponent.
+    - Traditionally a difference of 100 points reflects a 64% chance the higher rated player wins.
+- The winning player "takes" an amount of points from the losing player.
+- The amount that's taken depends on how different the ratings are.
+    - If both players are 1500; The winner's post-match rating will be 1510 and the loser will be 1490
+    - If the winning player's pre-match rating is 1300 and the loser is 1600; The winner's post-match rating will be 1317 and the loser will be 1583
+    - Conversely, if the winning player's pre-match rating is 1600 and the loser is 1300; The winner's post-match rating will be 1603 and the loser will be 1297
+       - **Note:** that a higher rated player will "take" less points from a lower rated player in the event of a win. Why? Because they were expected to win and no one wants to encourage killing boars in the wilderness to gain XP.
+
+Since the initial ELO ratings there have been a variety of different version: [GLICKO](https://en.wikipedia.org/wiki/Glicko_rating_system), [GLICKO-2](https://glicko.net/glicko/glicko2.pdf), [TrueSkill](https://en.wikipedia.org/wiki/TrueSkill), 
+
+I think the most interesting version is Coulom's take. 
+
+#### What makes WHR different?
+In brief, WHR takes into account strength of schedule across entire playing history to determine the current score of all players.
+
+Imagine this scenario:  Two players (PlayerA & PlayerB) with similar scores (say a traditional starting score like 1500) play each other 12 times.  They split the matches evenly both going 6-6.  Fair to say they are evenly matched.  Now, PlayerA goes on to play someone else with a much higher score (we'll say 1900) and beats him.  PlayerA has deservedly increased his rating (by ~18pts).  But what about PlayerB?  If we agreed that PlayerA and PlayerB are evenly matched shouldn't that mean that PlayerB is also quite good?  
+
+What WHR aims to do is re-score all participants by working through all the past "branches" of fight histories to produce a current snapshot of what all participants current scores are.  So match wins/losses affect more than just the two participants and instead affects all the opponents in each participants history (and thus all those previous opponents opponents... and those opponents opponents... and so on...).  
+
+Additionally, it has a time decaying function (that's adjustable here) to account for skill changes over time.  Beating a world champion when they were just starting out will have far less impact than beating a world champion at the top of their game.
+
+## Getting Started
 
 To install the library, use the following command:
 
