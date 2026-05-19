@@ -185,3 +185,18 @@ whr = whole_history_rating.Base({'uncased': True})
 ## Upcoming Changes
 - Starting values based on fighter type
 - Delta in scores based on "type" of win # mma_whr
+
+## Loading from mma-insights (GCP)
+
+1. Start the Cloud SQL instance and Auth Proxy (`CLOUD_SQL_HOST=localhost` in `.env`).
+2. Copy `.env.example` to `.env` and fill in credentials.
+3. Install: `pip install -e .`
+4. Check DB: `python scripts/ensure_db.py`
+5. Load and iterate:
+
+```bash
+python scripts/load_and_iterate.py --source auto --limit 100
+python scripts/load_and_iterate.py --source auto
+```
+
+`--source` is `auto` (Postgres then GCS fallback), `postgres`, or `gcs`. Fights use `fighter_a`, `fighter_b`, `date`, `winner`, and method of victory.
