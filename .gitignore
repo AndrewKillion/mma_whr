@@ -4,7 +4,8 @@ __pycache__/
 .venv/
 *.whr
 fight_whr.egg-info/
+*.egg-info 
+venv
 dist/
 build/
 .cloud-sql-proxy.pid
-.env.example
