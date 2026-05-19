@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+*.whr
+fight_whr.egg-info/
+dist/
+build/
+.cloud-sql-proxy.pid
+.env.example
