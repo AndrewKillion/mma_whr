@@ -327,6 +327,9 @@ class Base:
 
         rows = fetch_fights(source=source, limit=limit)
         for row in rows:
+            extras: dict[str, Any] = {}
+            if row.weightclass is not None:
+                extras["weightclass"] = row.weightclass
             self.create_fight(
                 row.fighter_a,
                 row.fighter_b,
@@ -334,6 +337,7 @@ class Base:
                 row.time_step,
                 0,
                 row.outcome,
+                extras,
             )
         return len(rows)
 

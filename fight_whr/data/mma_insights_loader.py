@@ -31,6 +31,7 @@ class FightRow(BaseModel):
     winner: str
     outcome: int
     time_step: int
+    weightclass: str | None = None
 
 
 def normalize_method(method: str | None) -> str | None:
@@ -69,6 +70,21 @@ def _method_column(columns: list[str]) -> str | None:
     return None
 
 
+def _weightclass_column(columns: list[str]) -> str | None:
+    lower = {c.lower(): c for c in columns}
+    for name in ("weightclass", "weight_class"):
+        if name in lower:
+            return lower[name]
+    return None
+
+
+def _normalize_weightclass(value: Any) -> str | None:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
 def _rows_from_dataframe(df: pd.DataFrame) -> list[FightRow]:
     method_col = _method_column(list(df.columns))
     if method_col is None:
@@ -90,8 +106,10 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[FightRow]:
     df["time_step"] = (df["date"] - min_date).dt.days.astype(int)
     df["outcome"] = df["method_norm"].map(method_to_outcome)
 
+    wc_col = _weightclass_column(list(df.columns))
     rows: list[FightRow] = []
     for rec in df.sort_values("time_step").to_dict(orient="records"):
+        wc = _normalize_weightclass(rec[wc_col]) if wc_col else None
         rows.append(
             FightRow(
                 fighter_a=rec["fighter_a"],
@@ -100,6 +118,7 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[FightRow]:
                 winner=rec["winner"],
                 outcome=int(rec["outcome"]),
                 time_step=int(rec["time_step"]),
+                weightclass=wc,
             )
         )
     return rows
@@ -139,10 +158,10 @@ def fetch_fights_from_postgres(limit: int | None = None) -> list[FightRow]:
 
         if table == ("raw", "ufc_fight_data"):
             sql = """
-                SELECT fighter_a, fighter_b, fight_date AS date, winner, method
+                SELECT fighter_a, fighter_b, fight_date AS date, winner, method, weightclass
                 FROM (
                     SELECT DISTINCT ON (fight_id)
-                        fighter_a, fighter_b, fight_date, winner, method
+                        fighter_a, fighter_b, fight_date, winner, method, weightclass
                     FROM raw.ufc_fight_data
                     WHERE fight_date IS NOT NULL
                       AND fight_id IS NOT NULL
@@ -160,12 +179,15 @@ def fetch_fights_from_postgres(limit: int | None = None) -> list[FightRow]:
                     """,
                     (schema, name),
                 )
-                cols = {r[0].lower() for r in cur.fetchall()}
+                col_names = [r[0] for r in cur.fetchall()]
+                cols = {c.lower() for c in col_names}
                 if "mov" in cols and "method" not in cols:
                     method_col = "mov"
             date_col = "fight_date" if "fight_date" in cols else "date"
+            wc_col = _weightclass_column(col_names)
+            wc_select = f", {wc_col} AS weightclass" if wc_col else ""
             sql = f"""
-                SELECT fighter_a, fighter_b, {date_col} AS date, winner, {method_col} AS method
+                SELECT fighter_a, fighter_b, {date_col} AS date, winner, {method_col} AS method{wc_select}
                 FROM {schema}.{name}
                 WHERE {date_col} IS NOT NULL
                 ORDER BY {date_col}
