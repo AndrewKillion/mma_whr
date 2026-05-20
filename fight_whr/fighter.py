@@ -11,6 +11,7 @@ import numpy.typing as npt
 from fight_whr.utils import UnstableRatingException
 from fight_whr import fighterday as FD
 from fight_whr import fight as F
+from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
 
 
 class Fighter:
@@ -18,7 +19,9 @@ class Fighter:
         self.name = name
         self.debug = config["debug"]
         self.w2 = (math.sqrt(config["w2"]) * math.log(10) / 400) ** 2
-        self.outcome_weights = config.get("outcome_weights", {0: 1.12, 1: 0.70, 2: 1.17, 3: 1.00})
+        self.outcome_weights = config.get(
+            "outcome_weights", dict(DEFAULT_OUTCOME_WEIGHTS)
+        )
         self.days: list[FD.FighterDay] = []
 
     def log_likelihood(self) -> float:
