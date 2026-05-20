@@ -8,6 +8,7 @@ from typing import Any
 from fight_whr.utils import test_stability
 from fight_whr.fighter import Fighter
 from fight_whr.fight import Fight
+from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
 
 
 class Base:
@@ -15,12 +16,7 @@ class Base:
         self.config = config if config is not None else {}
         self.config.setdefault("debug", False)
         self.config.setdefault("w2", 17.0)
-        self.config.setdefault("outcome_weights", {
-                                0: 1.12, #KO
-                                1: 0.30, #Split Decision
-                                2: 1.17, #Submission
-                                3: 1.00, #Unanimous Decision
-                              })
+        self.config.setdefault("outcome_weights", dict(DEFAULT_OUTCOME_WEIGHTS))
         self.config.setdefault("uncased", False)
         self.fights = []
         self.fighters = {}
@@ -255,9 +251,6 @@ class Base:
             bpd_elo = bpd.elo
         fighter1_proba = apd_gamma / (apd_gamma + 10 ** ((bpd_elo - handicap) / 400.0))
         fighter2_proba = bpd_gamma / (bpd_gamma + 10 ** ((apd_elo + handicap) / 400.0))
-        print(
-            f"win probability: {name1}:{fighter1_proba*100:.2f}%; {name2}:{fighter2_proba*100:.2f}%"
-        )
         return fighter1_proba, fighter2_proba
 
     def _run_one_iteration(self) -> None:
@@ -323,6 +316,7 @@ class Base:
         source: str = "auto",
         limit: int | None = None,
     ) -> int:
+        """Load fights from mma-insights. limit=None (default) loads the full history."""
         from fight_whr.data.mma_insights_loader import fetch_fights
 
         rows = fetch_fights(source=source, limit=limit)

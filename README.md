@@ -62,6 +62,51 @@ whr.create_fight("khabib", "poirier", "one", 2, 0)
 whr.create_fight("khabib", "gaethje", "one", 3, 0)
 ```
 
+### Outcome weights (method of victory)
+
+Wins are not all equal. Each fight uses a multiplier `c` on the method of victory when WHR updates ratings (higher = more rating movement through the history graph):
+
+| Outcome | Key | Default `c` |
+|---------|-----|-------------|
+| KO/TKO | 0 | 1.2 |
+| Submission | 2 | 1.1 |
+| Unanimous decision | 3 | 1.0 |
+| Split / majority decision | 1 | 0.5 |
+
+Order of decisiveness: **KO > Submission > Decision > Split** (split is near-zero exchange).
+
+Override when creating the base:
+
+```python
+from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
+
+whr = Base(config={"outcome_weights": {**DEFAULT_OUTCOME_WEIGHTS, 0: 1.25}})
+```
+
+Or pass a JSON file to `scripts/load_and_iterate.py` with `--outcome-weights path/to/weights.json` (keys `0`–`3`).
+
+By default the loader pulls **all** fights (no `LIMIT`). Use `--limit N` only for a smaller slice (oldest N by `fight_date`).
+
+Look up a specific fighter after the run:
+
+```bash
+python scripts/load_and_iterate.py --source postgres --fighter "Alex Pereira"
+```
+
+Hypothetical matchup (uses each fighter's latest rating):
+
+```bash
+python scripts/load_and_iterate.py --source postgres --matchup "Ciryl Gane" "Alex Pereira"
+```
+
+Optional Elo handicap (positive favors the first fighter):
+
+```bash
+python scripts/load_and_iterate.py --source postgres --matchup "Fighter A" "Fighter B" --handicap 50
+```
+
+Partial names work if the match is unique; otherwise the CLI lists candidates.
+
 ### Refining Ratings Towards Stability
 
 To achieve accurate and stable ratings, the WHR algorithm allows for iterative refinement. This process can be controlled manually or handled automatically to adjust fighter ratings until they reach a stable state.
@@ -195,7 +240,7 @@ whr = whole_history_rating.Base({'uncased': True})
 5. Load and iterate:
 
 ```bash
-python scripts/load_and_iterate.py --source auto --limit 100
+python scripts/load_and_iterate.py --source postgres
 python scripts/load_and_iterate.py --source auto
 ```
 
