@@ -9,6 +9,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from _repo_path import ensure_repo_on_path
+
+ensure_repo_on_path()
+
 from fight_whr.data.db import check_connection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
