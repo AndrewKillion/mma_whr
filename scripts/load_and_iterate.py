@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+loc#!/usr/bin/env python3
 import argparse
 
 from _repo_path import ensure_repo_on_path

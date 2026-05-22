@@ -256,14 +256,16 @@ python scripts/load_and_iterate.py --source auto
 
 ### Offline local snapshot
 
-The primary Cloud SQL query lives in [`fight_whr/data/sql/ufc_fight_data.sql`](fight_whr/data/sql/ufc_fight_data.sql). Export a parquet copy once while online:
+The primary Cloud SQL query lives in [`fight_whr/data/sql/ufc_fight_data.sql`](fight_whr/data/sql/ufc_fight_data.sql). 
+
+To save a local copy in order to work offline:
 
 ```bash
 python scripts/ensure_db.py
 python scripts/export_fights_snapshot.py
 ```
 
-Default output: `data/local/ufc_fights.parquet` (gitignored). Optional `--limit N` or `--output /path/to/file.parquet`.
+Default output: `data/local/ufc_fights.parquet` (gitignored). Optional `--limit N` (to limit amounts) or `--output /path/to/file.parquet` (to change destination).
 
 **Remote (Cloud SQL):**
 
