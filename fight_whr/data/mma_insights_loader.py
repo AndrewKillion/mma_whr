@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -9,8 +10,13 @@ from pydantic import BaseModel
 
 from fight_whr.data.db import check_connection, get_connection
 from fight_whr.data.gcs_fights import fetch_raw_fight_rows
+from fight_whr.data.local_snapshot import (
+    SQL_PATH,
+    resolve_local_fights_path,
+    save_local_snapshot,
+)
 
-Source = Literal["auto", "postgres", "gcs"]
+Source = Literal["auto", "postgres", "gcs", "local"]
 
 METHOD_PATTERN = re.compile(
     r"KO|TKO|Submission|Unanimous|Majority|Split|Doctor",
@@ -124,6 +130,13 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[FightRow]:
     return rows
 
 
+def _load_sql_file(name: str) -> str:
+    path = Path(__file__).resolve().parent / "sql" / name
+    if not path.is_file():
+        raise FileNotFoundError(f"SQL file not found: {path}")
+    return path.read_text()
+
+
 def _find_fight_table(conn) -> tuple[str, str] | None:
     with conn.cursor() as cur:
         cur.execute(
@@ -147,7 +160,7 @@ def _find_fight_table(conn) -> tuple[str, str] | None:
     return next(iter(found), None) if found else None
 
 
-def fetch_fights_from_postgres(limit: int | None = None) -> list[FightRow]:
+def fetch_fight_dataframe_from_postgres(limit: int | None = None) -> pd.DataFrame:
     check_connection()
     conn = get_connection()
     try:
@@ -157,18 +170,7 @@ def fetch_fights_from_postgres(limit: int | None = None) -> list[FightRow]:
         schema, name = table
 
         if table == ("raw", "ufc_fight_data"):
-            sql = """
-                SELECT fighter_a, fighter_b, fight_date AS date, winner, method, weightclass
-                FROM (
-                    SELECT DISTINCT ON (fight_id)
-                        fighter_a, fighter_b, fight_date, winner, method, weightclass
-                    FROM raw.ufc_fight_data
-                    WHERE fight_date IS NOT NULL
-                      AND fight_id IS NOT NULL
-                    ORDER BY fight_id, round DESC
-                ) fights
-                ORDER BY fight_date
-            """
+            sql = _load_sql_file("ufc_fight_data.sql")
         else:
             method_col = "method"
             with conn.cursor() as cur:
@@ -194,10 +196,36 @@ def fetch_fights_from_postgres(limit: int | None = None) -> list[FightRow]:
             """
 
         if limit is not None:
-            sql += f" LIMIT {int(limit)}"
-        df = pd.read_sql(sql, conn)
+            sql = sql.rstrip().rstrip(";") + f" LIMIT {int(limit)}"
+        return pd.read_sql(sql, conn)
     finally:
         conn.close()
+
+
+def fetch_fights_from_postgres(limit: int | None = None) -> list[FightRow]:
+    return _rows_from_dataframe(fetch_fight_dataframe_from_postgres(limit=limit))
+
+
+def export_local_fight_snapshot(
+    path: str | Path | None = None, limit: int | None = None
+) -> Path:
+    df = fetch_fight_dataframe_from_postgres(limit=limit)
+    return save_local_snapshot(df=df, path=resolve_local_fights_path(path))
+
+
+def fetch_fights_from_local(
+    limit: int | None = None, path: str | Path | None = None
+) -> list[FightRow]:
+    snapshot = resolve_local_fights_path(path)
+    if not snapshot.is_file():
+        raise FileNotFoundError(
+            f"Local fight snapshot not found: {snapshot}\n"
+            "Run: python scripts/export_fights_snapshot.py\n"
+            f"SQL query is stored at: {SQL_PATH}"
+        )
+    df = pd.read_parquet(snapshot)
+    if limit is not None:
+        df = df.head(int(limit))
     return _rows_from_dataframe(df)
 
 
@@ -210,8 +238,12 @@ def fetch_fights_from_gcs(limit: int | None = None) -> list[FightRow]:
 
 
 def fetch_fights(
-    source: Source = "auto", limit: int | None = None
+    source: Source = "auto",
+    limit: int | None = None,
+    local_path: str | Path | None = None,
 ) -> list[FightRow]:
+    if source == "local":
+        return fetch_fights_from_local(limit=limit, path=local_path)
     if source == "gcs":
         return fetch_fights_from_gcs(limit=limit)
     if source == "postgres":

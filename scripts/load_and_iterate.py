@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 
+from _repo_path import ensure_repo_on_path
+
+ensure_repo_on_path()
+
 from fight_whr import Base
 from fight_whr.outcome_weights import load_outcome_weights_from_json
 
@@ -81,7 +85,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Load fights from mma-insights and run Newton WHR",
     )
-    parser.add_argument("--source", default="auto", choices=["auto", "postgres", "gcs"])
+    parser.add_argument(
+        "--source",
+        default="auto",
+        choices=["auto", "postgres", "gcs", "local"],
+        help="auto=postgres then gcs; local=parquet snapshot (no network)",
+    )
+    parser.add_argument(
+        "--local-fights",
+        type=str,
+        default=None,
+        help="Parquet path for --source local (default: data/local/ufc_fights.parquet)",
+    )
     parser.add_argument(
         "--limit",
         type=int,
@@ -124,7 +139,11 @@ def main() -> None:
         print("Loading all fights (no limit)...")
     else:
         print(f"Loading up to {args.limit} fights (oldest first by fight_date)...")
-    n = whr.load_fights_from_mma_insights(source=args.source, limit=args.limit)
+    n = whr.load_fights_from_mma_insights(
+        source=args.source,
+        limit=args.limit,
+        local_path=args.local_fights,
+    )
     print(f"Loaded {n} fights")
     whr.iterate(args.iterations)
     print("\nTop 20:")
