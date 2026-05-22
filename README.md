@@ -244,4 +244,30 @@ python scripts/load_and_iterate.py --source postgres
 python scripts/load_and_iterate.py --source auto
 ```
 
-`--source` is `auto` (Postgres then GCS fallback), `postgres`, or `gcs`. Fights use `fighter_a`, `fighter_b`, `date`, `winner`, and method of victory.
+`--source` is `auto` (Postgres then GCS fallback), `postgres`, `gcs`, or `local`. Fights use `fighter_a`, `fighter_b`, `date`, `winner`, and method of victory.
+
+### Offline local snapshot
+
+The primary Cloud SQL query lives in [`fight_whr/data/sql/ufc_fight_data.sql`](fight_whr/data/sql/ufc_fight_data.sql). Export a parquet copy once while online:
+
+```bash
+python scripts/ensure_db.py
+python scripts/export_fights_snapshot.py
+```
+
+Default output: `data/local/ufc_fights.parquet` (gitignored). Optional `--limit N` or `--output /path/to/file.parquet`.
+
+**Remote (Cloud SQL):**
+
+```bash
+python scripts/ensure_db.py
+python scripts/load_and_iterate.py --source postgres
+```
+
+**Local (no network):**
+
+```bash
+python scripts/load_and_iterate.py --source local
+```
+
+Use `--local-fights /path/to/ufc_fights.parquet` or set `MMA_WHR_LOCAL_FIGHTS_PATH` in `.env` for a custom snapshot path. Re-run `export_fights_snapshot.py` when you want fresh data from the database.

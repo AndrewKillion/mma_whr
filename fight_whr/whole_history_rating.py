@@ -315,11 +315,12 @@ class Base:
         self,
         source: str = "auto",
         limit: int | None = None,
+        local_path: str | None = None,
     ) -> int:
         """Load fights from mma-insights. limit=None (default) loads the full history."""
         from fight_whr.data.mma_insights_loader import fetch_fights
 
-        rows = fetch_fights(source=source, limit=limit)
+        rows = fetch_fights(source=source, limit=limit, local_path=local_path)
         for row in rows:
             extras: dict[str, Any] = {}
             if row.weightclass is not None:
