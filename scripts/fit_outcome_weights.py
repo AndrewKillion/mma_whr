@@ -8,10 +8,16 @@ ensure_repo_on_path()
 
 from fight_whr.data.mma_insights_loader import fetch_fights
 from fight_whr.fit_outcome_weights import (
+    DEFAULT_WEIGHT_GRID_ARG,
+    DEFAULT_WEIGHT_GRID_COUNT,
+    DEFAULT_WEIGHT_GRID_HIGH,
+    DEFAULT_WEIGHT_GRID_LOW,
+    describe_weight_search_grid,
     evaluate_outcome_weights,
     format_weights,
     grid_search_outcome_weights,
 )
+from fight_whr.outcome_weights import OUTCOME_TYPES
 from fight_whr.outcome_weights import (
     DEFAULT_OUTCOME_WEIGHTS,
     NEUTRAL_OUTCOME_WEIGHTS,
@@ -37,18 +43,29 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=30)
     parser.add_argument(
         "--ko",
-        default="0.8,1.0,1.2,1.4",
-        help="Comma-separated KO weights to try (rescaled vs UD=1)",
+        default=DEFAULT_WEIGHT_GRID_ARG,
+        help=(
+            f"Comma-separated KO weight multipliers to try (outcome key 0). "
+            f"Default: {DEFAULT_WEIGHT_GRID_COUNT} values from "
+            f"{DEFAULT_WEIGHT_GRID_LOW} to {DEFAULT_WEIGHT_GRID_HIGH} "
+            f"(see fight_whr/fit_outcome_weights.py DEFAULT_WEIGHT_GRID_*)."
+        ),
     )
     parser.add_argument(
         "--split",
-        default="0.3,0.5,0.7,1.0",
-        help="Comma-separated split-decision weights to try",
+        default=DEFAULT_WEIGHT_GRID_ARG,
+        help=(
+            f"Comma-separated split-decision multipliers (outcome key 1). "
+            f"Default: same {DEFAULT_WEIGHT_GRID_COUNT}-point grid as --ko."
+        ),
     )
     parser.add_argument(
         "--submission",
-        default="0.9,1.0,1.1,1.2",
-        help="Comma-separated submission weights to try",
+        default=DEFAULT_WEIGHT_GRID_ARG,
+        help=(
+            f"Comma-separated submission multipliers (outcome key 2). "
+            f"Default: same {DEFAULT_WEIGHT_GRID_COUNT}-point grid as --ko."
+        ),
     )
     parser.add_argument(
         "--baseline",
@@ -66,10 +83,15 @@ def main() -> None:
     ko_values = _parse_float_list(args.ko)
     split_values = _parse_float_list(args.split)
     sub_values = _parse_float_list(args.submission)
+    print(describe_weight_search_grid(
+        ko_values=ko_values,
+        split_values=split_values,
+        submission_values=sub_values,
+    ))
     n_grid = len(ko_values) * len(split_values) * len(sub_values)
     print(
-        f"Grid: {n_grid} combos (UD anchor=1.0), "
-        f"train_ratio={args.train_ratio}, iterations={args.iterations}"
+        f"\nRun: train_ratio={args.train_ratio}, iterations={args.iterations}, "
+        f"outcome keys={sorted(OUTCOME_TYPES)}"
     )
 
     baselines: dict[str, dict[int, float]] = {}

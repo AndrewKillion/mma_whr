@@ -10,8 +10,75 @@ from fight_whr.data.mma_insights_loader import FightRow, fetch_fights
 from fight_whr.outcome_weights import (
     ANCHOR_OUTCOME,
     DEFAULT_OUTCOME_WEIGHTS,
+    OUTCOME_TYPES,
     build_outcome_weights,
 )
+
+DEFAULT_WEIGHT_GRID_LOW = 0.7
+DEFAULT_WEIGHT_GRID_HIGH = 2.7
+DEFAULT_WEIGHT_GRID_COUNT = 10
+
+
+def linspace_weight_grid(
+    *,
+    low: float = DEFAULT_WEIGHT_GRID_LOW,
+    high: float = DEFAULT_WEIGHT_GRID_HIGH,
+    count: int = DEFAULT_WEIGHT_GRID_COUNT,
+) -> list[float]:
+    if count < 2:
+        raise ValueError(f"count must be at least 2, got {count}")
+    if high <= low:
+        raise ValueError(f"high must exceed low, got low={low}, high={high}")
+    step = (high - low) / (count - 1)
+    return [low + i * step for i in range(count)]
+
+
+def format_weight_grid_arg(
+    values: list[float] | None = None,
+    *,
+    low: float = DEFAULT_WEIGHT_GRID_LOW,
+    high: float = DEFAULT_WEIGHT_GRID_HIGH,
+    count: int = DEFAULT_WEIGHT_GRID_COUNT,
+) -> str:
+    grid = (
+        values
+        if values is not None
+        else linspace_weight_grid(low=low, high=high, count=count)
+    )
+    return ",".join(f"{v:.6g}" for v in grid)
+
+
+DEFAULT_WEIGHT_GRID_VALUES: list[float] = linspace_weight_grid()
+DEFAULT_WEIGHT_GRID_ARG: str = format_weight_grid_arg(DEFAULT_WEIGHT_GRID_VALUES)
+
+
+def describe_weight_search_grid(
+    ko_values: list[float],
+    split_values: list[float],
+    submission_values: list[float],
+) -> str:
+    lines = [
+        "Method-of-victory outcomes (fight_whr/outcome_weights.py OUTCOME_TYPES):",
+    ]
+    for key in sorted(OUTCOME_TYPES):
+        anchor_note = " [anchor, fixed at 1.0 in search]" if key == ANCHOR_OUTCOME else " [tuned in grid]"
+        lines.append(f"  {key} = {OUTCOME_TYPES[key]}{anchor_note}")
+    lines.append("")
+    lines.append(
+        f"Weight candidates per tunable outcome "
+        f"({DEFAULT_WEIGHT_GRID_LOW}–{DEFAULT_WEIGHT_GRID_HIGH}, "
+        f"{DEFAULT_WEIGHT_GRID_COUNT} points by default):"
+    )
+    lines.append(f"  KO:         {_format_value_list(ko_values)}")
+    lines.append(f"  Split:      {_format_value_list(split_values)}")
+    lines.append(f"  Submission: {_format_value_list(submission_values)}")
+    n = len(ko_values) * len(split_values) * len(submission_values)
+    lines.append(f"  Grid size: {len(ko_values)} × {len(split_values)} × {len(submission_values)} = {n} combinations")
+    return "\n".join(lines)
+
+
+def _format_value_list(values: list[float]) -> str:
+    return ", ".join(f"{v:.4g}" for v in values)
 
 
 @dataclass(frozen=True)
@@ -27,7 +94,7 @@ def _gamma_elo_at_time(whr: Base, name: str, time_step: int) -> tuple[float, flo
     fighter = whr.fighter_by_name(name)
     prior_days = [d for d in fighter.days if d.day <= time_step]
     if not prior_days:
-        return 1.0, 0.0
+        return whr._gamma_elo_for_matchup(fighter=fighter)
     day = prior_days[-1]
     return day.gamma(), day.elo
 
@@ -148,6 +215,6 @@ def grid_search_outcome_weights(
 
 
 def format_weights(weights: dict[int, float]) -> str:
-    labels = {0: "KO", 1: "Split", 2: "Sub", 3: "UD"}
-    parts = [f"{labels[k]}={weights[k]:.3f}" for k in sorted(weights)]
+    short = {0: "KO", 1: "Split", 2: "Sub", 3: "UD"}
+    parts = [f"{short[k]}={weights[k]:.3f}" for k in sorted(weights)]
     return ", ".join(parts)

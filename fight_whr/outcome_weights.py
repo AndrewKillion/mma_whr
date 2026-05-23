@@ -3,7 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+# Method-of-victory types stored on each fight (see mma_insights_loader.method_to_outcome).
+# Grid search for tunable multipliers lives in fight_whr.fit_outcome_weights.
 ANCHOR_OUTCOME = 3
+
+OUTCOME_TYPES: dict[int, str] = {
+    0: "KO/TKO",
+    1: "Split/Majority decision",
+    2: "Submission",
+    3: "Unanimous decision",
+}
 
 NEUTRAL_OUTCOME_WEIGHTS: dict[int, float] = {
     0: 1.4,
@@ -63,6 +72,12 @@ def load_outcome_weights_from_json(path: str | Path) -> dict[int, float]:
     return loaded
 
 
-if __name__ == 'main':
-    print(build_outcome_weights(    ))
-    load_outcome_weights_from_json()
+if __name__ == "__main__":
+    print("Outcome types (OUTCOME_TYPES):")
+    for key, label in sorted(OUTCOME_TYPES.items()):
+        anchor = " [anchor]" if key == ANCHOR_OUTCOME else ""
+        print(f"  {key}: {label}{anchor}")
+    print(
+        "\nFit-script search grid (candidate multipliers, not outcome names): "
+        "fight_whr/fit_outcome_weights.py → DEFAULT_WEIGHT_GRID_VALUES"
+    )

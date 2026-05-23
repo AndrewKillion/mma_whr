@@ -12,17 +12,56 @@ from fight_whr.utils import UnstableRatingException
 from fight_whr import fighterday as FD
 from fight_whr import fight as F
 from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
+from fight_whr.weightclass_elo import (
+    gamma_from_elo,
+    normalize_weightclass_key,
+    starting_elo_for,
+)
 
 
 class Fighter:
     def __init__(self, name: str, config: dict[str, Any]):
         self.name = name
+        self.config = config
         self.debug = config["debug"]
         self.w2 = (math.sqrt(config["w2"]) * math.log(10) / 400) ** 2
         self.outcome_weights = config.get(
             "outcome_weights", dict(DEFAULT_OUTCOME_WEIGHTS)
         )
+        self.weightclass_key: str | None = None
         self.days: list[FD.FighterDay] = []
+
+    def _weightclass_overrides(self) -> dict[str, float] | None:
+        raw = self.config.get("weightclass_starting_elo")
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise TypeError("weightclass_starting_elo config must be a dict")
+        return {str(k): float(v) for k, v in raw.items()}
+
+    def _use_weightclass_starting_elo(self) -> bool:
+        return bool(self.config.get("use_weightclass_starting_elo", True))
+
+    def _initial_gamma_for_fight(self, fight: F.Fight) -> float:
+        if not self._use_weightclass_starting_elo():
+            return 1.0
+        wc_raw = fight.extras.get("weightclass")
+        if wc_raw is not None:
+            key = normalize_weightclass_key(str(wc_raw))
+            if key is not None:
+                self.weightclass_key = key
+        elo = starting_elo_for(
+            self.weightclass_key,
+            overrides=self._weightclass_overrides(),
+        )
+        if elo is None:
+            return 1.0
+        return gamma_from_elo(elo)
+
+    def set_weightclass(self, weightclass: str | None) -> str | None:
+        """Set division for a fighter with no bouts (hypothetical matchups)."""
+        self.weightclass_key = normalize_weightclass_key(weightclass)
+        return self.weightclass_key
 
     def log_likelihood(self) -> float:
         """Computes the log likelihood of the fighter's ratings over all days.
@@ -256,7 +295,7 @@ class Fighter:
             new_pday = FD.FighterDay(self, fight.day)
             if len(self.days) == 0:
                 new_pday.is_first_day = True
-                new_pday.set_gamma(1)
+                new_pday.set_gamma(self._initial_gamma_for_fight(fight=fight))
             else:
                 # still not perfect because gamma of day index can more farther if more fights were not added in order
                 new_pday.set_gamma(self.days[day_index - 1].gamma())
