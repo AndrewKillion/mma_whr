@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from fight_whr import fighter as FR
 from fight_whr import fighterday as FD
+from fight_whr.rating_bounds import opponent_adjusted_gamma_from_elo
 
 
 class Fight:
@@ -52,19 +52,18 @@ class Fight:
         if self.bpd is None or self.apd is None:
             raise AttributeError("fighter_b day and fighter_a day must be set")
         if fighter == self.fighter_a:
-            opponent_elo = self.bpd.elo + self.handicap
+            opponent_day = self.bpd
+            handicap_elo = self.handicap
         elif fighter == self.fighter_b:
-            opponent_elo = self.apd.elo - self.handicap
+            opponent_day = self.apd
+            handicap_elo = -self.handicap
         else:
-            raise (
-                AttributeError(
-                    f"No opponent for {fighter.__str__()}, since they're not in this fight: {self.__str__()}."
-                )
+            raise AttributeError(
+                f"No opponent for {fighter.__str__()}, since they're not in this fight: {self.__str__()}."
             )
-        rval = 10 ** (opponent_elo / 400.0)
-        if rval == 0 or rval > sys.maxsize:
-            raise AttributeError("bad adjusted gamma")
-        return rval
+        # WHR fights are within one division; offsets cancel if both use internal movement.
+        opponent_elo = opponent_day.internal_elo + handicap_elo
+        return opponent_adjusted_gamma_from_elo(opponent_elo)
 
     def opponent(self, fighter: FR.Fighter) -> FR.Fighter:
         """

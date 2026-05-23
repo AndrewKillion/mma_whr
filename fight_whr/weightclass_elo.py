@@ -130,7 +130,9 @@ def starting_elo_for(
 
 
 def gamma_from_elo(elo: float) -> float:
-    return 10 ** (elo / 400.0)
+    from fight_whr.rating_bounds import gamma_from_elo as _gamma_from_elo
+
+    return _gamma_from_elo(elo)
 
 
 def gamma_elo_for_debut(

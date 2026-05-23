@@ -9,7 +9,8 @@ from fight_whr.utils import test_stability
 from fight_whr.fighter import Fighter
 from fight_whr.fight import Fight
 from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
-from fight_whr.weightclass_elo import gamma_elo_for_debut
+from fight_whr.rating_bounds import gamma_from_elo
+from fight_whr.weightclass_elo import starting_elo_for
 
 
 class Base:
@@ -30,7 +31,7 @@ class Base:
             current (bool, optional): If True, displays only the latest elo rating. If False, displays all elo ratings for each day fougth.
         """
         fighters = [x for x in self.fighters.values() if len(x.days) > 0]
-        fighters.sort(key=lambda x: x.days[-1].gamma(), reverse=True)
+        fighters.sort(key=lambda x: x.days[-1].elo, reverse=True)
         for f in fighters:
             if len(f.days) > 0:
                 if current:
@@ -52,7 +53,7 @@ class Base:
         """
         result = []
         fighters = [x for x in self.fighters.values() if len(x.days) > 0]
-        fighters.sort(key=lambda x: x.days[-1].gamma(), reverse=True)
+        fighters.sort(key=lambda x: x.days[-1].elo, reverse=True)
         for f in fighters:
             if len(f.days) > 0:
                 if current and compact:
@@ -247,12 +248,12 @@ class Base:
             raise TypeError("weightclass_starting_elo config must be a dict")
         if weightclass is not None:
             fighter.set_weightclass(weightclass=weightclass)
-        debut = gamma_elo_for_debut(
+        elo = starting_elo_for(
             fighter.weightclass_key,
             overrides=overrides,
         )
-        if debut is not None:
-            return debut
+        if elo is not None:
+            return gamma_from_elo(elo), elo
         return 1.0, 0.0
 
     def probability_future_match(
@@ -285,17 +286,16 @@ class Base:
             raise AttributeError("Invalid fight (fighter_a == fighter_b)")
         fighter1 = self.fighter_by_name(name1)
         fighter2 = self.fighter_by_name(name2)
-        apd_gamma, apd_elo = self._gamma_elo_for_matchup(
+        _, elo1 = self._gamma_elo_for_matchup(
             fighter=fighter1,
             weightclass=weightclass1,
         )
-        bpd_gamma, bpd_elo = self._gamma_elo_for_matchup(
+        _, elo2 = self._gamma_elo_for_matchup(
             fighter=fighter2,
             weightclass=weightclass2,
         )
-        fighter1_proba = apd_gamma / (apd_gamma + 10 ** ((bpd_elo - handicap) / 400.0))
-        fighter2_proba = bpd_gamma / (bpd_gamma + 10 ** ((apd_elo + handicap) / 400.0))
-        return fighter1_proba, fighter2_proba
+        fighter1_proba = 1.0 / (1.0 + 10 ** ((elo2 - elo1 - handicap) / 400.0))
+        return fighter1_proba, 1.0 - fighter1_proba
 
     def _run_one_iteration(self) -> None:
         """Runs one iteration of the WHR algorithm."""

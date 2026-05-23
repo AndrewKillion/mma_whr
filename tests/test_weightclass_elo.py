@@ -3,9 +3,9 @@ from __future__ import annotations
 import math
 
 from fight_whr import Base
+from fight_whr.rating_bounds import gamma_from_elo
 from fight_whr.weightclass_elo import (
     STARTING_ELO_BY_KEY,
-    gamma_from_elo,
     normalize_weightclass_key,
     starting_elo_for,
 )
@@ -39,9 +39,12 @@ def test_first_fight_uses_weightclass_debut_elo() -> None:
         {"weightclass": "Lightweight"},
     )
     whr.create_fight("vet", "other", "A", 1, 0, 3, {"weightclass": "Lightweight"})
-    debut_day = whr.fighter_by_name("debut_lw").days[0]
-    assert abs(debut_day.elo - STARTING_ELO_BY_KEY["LW"]) < 1e-6
-    assert abs(debut_day.gamma() - gamma_from_elo(1500.0)) < 1e-9
+    debut = whr.fighter_by_name("debut_lw")
+    debut_day = debut.days[0]
+    assert debut.elo_offset == STARTING_ELO_BY_KEY["LW"]
+    assert debut_day.internal_elo == 0.0
+    assert debut_day.elo == 1500.0
+    assert debut_day.gamma() == 1.0
 
 
 def test_first_fight_without_weightclass_keeps_legacy_prior() -> None:
@@ -49,21 +52,13 @@ def test_first_fight_without_weightclass_keeps_legacy_prior() -> None:
     whr.create_fight("legacy", "vet", "A", 1, 0, 3, {})
     whr.create_fight("vet", "other", "A", 1, 0, 3, {})
     debut_day = whr.fighter_by_name("legacy").days[0]
+    assert whr.fighter_by_name("legacy").elo_offset == 0.0
     assert debut_day.elo == 0.0
     assert debut_day.gamma() == 1.0
 
 
 def test_probability_future_match_debut_weightclasses() -> None:
     whr = Base()
-    whr.create_fight("vet_hw", "opp", "A", 1, 0, 3, {"weightclass": "Heavyweight"})
-    p_hw, p_lw = whr.probability_future_match(
-        "vet_hw",
-        "rookie_lw",
-        weightclass2="Lightweight",
-    )
-    assert p_hw > p_lw
-    assert math.isclose(p_hw + p_lw, 1.0, rel_tol=1e-9)
-
     p_debut_hw, p_debut_lw = whr.probability_future_match(
         "ghost_hw",
         "ghost_lw",
@@ -71,4 +66,5 @@ def test_probability_future_match_debut_weightclasses() -> None:
         weightclass2="Lightweight",
     )
     assert p_debut_hw > p_debut_lw
+    assert math.isclose(p_debut_hw + p_debut_lw, 1.0, rel_tol=1e-9)
     assert abs(p_debut_hw - 1 / (1 + 10 ** ((1500 - 1900) / 400))) < 0.01

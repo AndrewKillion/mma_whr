@@ -303,6 +303,8 @@ Fighters with no prior bouts in WHR use division-specific starting ratings when 
 
 Mappings and aliases live in `fight_whr/weightclass_elo.py`. Unknown divisions keep the legacy prior (Elo 0, gamma 1). Override via `Base(config={"weightclass_starting_elo": {"LW": 1550}})`.
 
+When loading fights, each fighter gets a permanent **division Elo floor** (`elo_offset` from the table above). WHR only moves them above/below that floor (`internal_elo` from `r`). Reported Elo = offset + internal movement, so women's divisions (550–800) stay below men's (1300–1900) in global lists unless fight history moves them a lot within their tier. Hypothetical matchups with no bouts use the table floor directly.
+
 ```python
 whr = Base()
 whr.set_fighter_weightclass("Prospect", "Lightweight")

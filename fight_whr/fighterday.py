@@ -5,6 +5,7 @@ import sys
 
 from fight_whr import fighter as FR
 from fight_whr import fight as F
+from fight_whr.rating_bounds import clamp_rating_r
 
 
 class FighterDay:
@@ -27,30 +28,24 @@ class FighterDay:
         self.r = math.log(value)
 
     def gamma(self) -> float:
-        """Calculates the fighter's performance rating (gamma) based on their rating.
+        """WHR performance rating (within-division); division floor is in elo_offset."""
+        return math.exp(clamp_rating_r(self.r))
 
-        Returns:
-            float: The fighter's gamma value.
-        """
-        return math.exp(self.r)
+    @property
+    def internal_elo(self) -> float:
+        """WHR movement around the fighter's division starting Elo."""
+        return (self.r * 400) / math.log(10)
 
     @property
     def elo(self) -> float:
-        """Calculates the ELO rating from the fighter's gamma value.
-
-        Returns:
-            float: The ELO rating.
-        """
-        return (self.r * 400) / (math.log(10))
+        """Displayed Elo = division debut floor + WHR movement."""
+        return self.fighter.elo_offset + self.internal_elo
 
     @elo.setter
     def elo(self, value: float) -> None:
-        """Sets the fighter's ELO rating, adjusting their internal rating accordingly.
-
-        Args:
-            value (float): The new ELO rating.
-        """
-        self.r = value * (math.log(10) / 400)
+        """Set full Elo; only the delta vs division offset is stored in r."""
+        delta = value - self.fighter.elo_offset
+        self.r = clamp_rating_r(delta * (math.log(10) / 400))
 
     def clear_fight_terms_cache(self) -> None:
         """Clears the cached terms for fights won and lost, forcing recalculation."""
@@ -158,5 +153,4 @@ class FighterDay:
         dlogp = self.log_likelihood_derivative()
         d2logp = self.log_likelihood_second_derivative()
         dr = dlogp / d2logp
-        new_r = self.r - dr
-        self.r = new_r
+        self.r = clamp_rating_r(self.r - dr)
