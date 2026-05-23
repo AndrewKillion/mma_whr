@@ -19,7 +19,7 @@ PRIOR_GUESS_OUTCOME_WEIGHTS: dict[int, float] = {
     3: 1.0,
 }
 
-DEFAULT_OUTCOME_WEIGHTS: dict[int, float] = dict(NEUTRAL_OUTCOME_WEIGHTS)
+DEFAULT_OUTCOME_WEIGHTS: dict[int, float] = dict(PRIOR_GUESS_OUTCOME_WEIGHTS)
 
 
 def anchor_outcome_weights(
@@ -64,4 +64,5 @@ def load_outcome_weights_from_json(path: str | Path) -> dict[int, float]:
 
 
 if __name__ == 'main':
+    print(build_outcome_weights(    ))
     load_outcome_weights_from_json()
