@@ -9,6 +9,8 @@ from fight_whr.utils import test_stability
 from fight_whr.fighter import Fighter
 from fight_whr.fight import Fight
 from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
+from fight_whr.rating_bounds import gamma_from_elo
+from fight_whr.weightclass_elo import starting_elo_for
 
 
 class Base:
@@ -17,6 +19,7 @@ class Base:
         self.config.setdefault("debug", False)
         self.config.setdefault("w2", 17.0)
         self.config.setdefault("outcome_weights", dict(DEFAULT_OUTCOME_WEIGHTS))
+        self.config.setdefault("use_weightclass_starting_elo", True)
         self.config.setdefault("uncased", False)
         self.fights = []
         self.fighters = {}
@@ -28,7 +31,7 @@ class Base:
             current (bool, optional): If True, displays only the latest elo rating. If False, displays all elo ratings for each day fougth.
         """
         fighters = [x for x in self.fighters.values() if len(x.days) > 0]
-        fighters.sort(key=lambda x: x.days[-1].gamma(), reverse=True)
+        fighters.sort(key=lambda x: x.days[-1].elo, reverse=True)
         for f in fighters:
             if len(f.days) > 0:
                 if current:
@@ -50,7 +53,7 @@ class Base:
         """
         result = []
         fighters = [x for x in self.fighters.values() if len(x.days) > 0]
-        fighters.sort(key=lambda x: x.days[-1].gamma(), reverse=True)
+        fighters.sort(key=lambda x: x.days[-1].elo, reverse=True)
         for f in fighters:
             if len(f.days) > 0:
                 if current and compact:
@@ -213,8 +216,53 @@ class Base:
                 return i, False
             a = b
 
+    def set_fighter_weightclass(self, name: str, weightclass: str | None) -> str | None:
+        """Assign a division to a fighter (used for debut Elo when they have no bouts)."""
+        fighter = self.fighter_by_name(name)
+        return fighter.set_weightclass(weightclass=weightclass)
+
+    def debut_elo_for_weightclass(self, weightclass: str | None) -> float | None:
+        """Return configured starting Elo for a division label, or None if unknown."""
+        overrides = self.config.get("weightclass_starting_elo")
+        if overrides is not None and not isinstance(overrides, dict):
+            raise TypeError("weightclass_starting_elo config must be a dict")
+        from fight_whr.weightclass_elo import starting_elo_for
+
+        return starting_elo_for(
+            weightclass,
+            overrides=overrides,
+        )
+
+    def _gamma_elo_for_matchup(
+        self,
+        fighter: Fighter,
+        weightclass: str | None = None,
+    ) -> tuple[float, float]:
+        if len(fighter.days) > 0:
+            day = fighter.days[-1]
+            return day.gamma(), day.elo
+        if not self.config.get("use_weightclass_starting_elo", True):
+            return 1.0, 0.0
+        overrides = self.config.get("weightclass_starting_elo")
+        if overrides is not None and not isinstance(overrides, dict):
+            raise TypeError("weightclass_starting_elo config must be a dict")
+        if weightclass is not None:
+            fighter.set_weightclass(weightclass=weightclass)
+        elo = starting_elo_for(
+            fighter.weightclass_key,
+            overrides=overrides,
+        )
+        if elo is not None:
+            return gamma_from_elo(elo), elo
+        return 1.0, 0.0
+
     def probability_future_match(
-        self, name1: str, name2: str, handicap: float = 0
+        self,
+        name1: str,
+        name2: str,
+        handicap: float = 0,
+        weightclass1: str | None = None,
+        weightclass2: str | None = None,
     ) -> tuple[float, float]:
         """Calculates the winning probability for a hypothetical match between two fighters.
 
@@ -222,6 +270,8 @@ class Base:
             name1 (str): The name of the first fighter.
             name2 (str): The name of the second fighter.
             handicap (float, optional): The handicap (in elo points).
+            weightclass1 (str | None): Division for name1 when they have no fight history.
+            weightclass2 (str | None): Division for name2 when they have no fight history.
 
         Returns:
             tuple[float, float]: The winning probabilities for name1 and name2, respectively, as percentages rounded to the second decimal.
@@ -229,7 +279,6 @@ class Base:
         Raises:
             AttributeError: Raised if name1 and name2 are equal
         """
-        # Avoid self-played fights (no info)
         if self.config["uncased"]:
             name1 = name1.lower()
             name2 = name2.lower()
@@ -237,21 +286,16 @@ class Base:
             raise AttributeError("Invalid fight (fighter_a == fighter_b)")
         fighter1 = self.fighter_by_name(name1)
         fighter2 = self.fighter_by_name(name2)
-        apd_gamma = 1
-        apd_elo = 0
-        bpd_gamma = 1
-        bpd_elo = 0
-        if len(fighter1.days) > 0:
-            apd = fighter1.days[-1]
-            apd_gamma = apd.gamma()
-            apd_elo = apd.elo
-        if len(fighter2.days) != 0:
-            bpd = fighter2.days[-1]
-            bpd_gamma = bpd.gamma()
-            bpd_elo = bpd.elo
-        fighter1_proba = apd_gamma / (apd_gamma + 10 ** ((bpd_elo - handicap) / 400.0))
-        fighter2_proba = bpd_gamma / (bpd_gamma + 10 ** ((apd_elo + handicap) / 400.0))
-        return fighter1_proba, fighter2_proba
+        _, elo1 = self._gamma_elo_for_matchup(
+            fighter=fighter1,
+            weightclass=weightclass1,
+        )
+        _, elo2 = self._gamma_elo_for_matchup(
+            fighter=fighter2,
+            weightclass=weightclass2,
+        )
+        fighter1_proba = 1.0 / (1.0 + 10 ** ((elo2 - elo1 - handicap) / 400.0))
+        return fighter1_proba, 1.0 - fighter1_proba
 
     def _run_one_iteration(self) -> None:
         """Runs one iteration of the WHR algorithm."""

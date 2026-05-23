@@ -12,17 +12,55 @@ from fight_whr.utils import UnstableRatingException
 from fight_whr import fighterday as FD
 from fight_whr import fight as F
 from fight_whr.outcome_weights import DEFAULT_OUTCOME_WEIGHTS
+from fight_whr.rating_bounds import clamp_rating_r
+from fight_whr.weightclass_elo import (
+    normalize_weightclass_key,
+    starting_elo_for,
+)
 
 
 class Fighter:
     def __init__(self, name: str, config: dict[str, Any]):
         self.name = name
+        self.config = config
         self.debug = config["debug"]
         self.w2 = (math.sqrt(config["w2"]) * math.log(10) / 400) ** 2
         self.outcome_weights = config.get(
             "outcome_weights", dict(DEFAULT_OUTCOME_WEIGHTS)
         )
+        self.weightclass_key: str | None = None
+        self.elo_offset: float = 0.0
         self.days: list[FD.FighterDay] = []
+
+    def _weightclass_overrides(self) -> dict[str, float] | None:
+        raw = self.config.get("weightclass_starting_elo")
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise TypeError("weightclass_starting_elo config must be a dict")
+        return {str(k): float(v) for k, v in raw.items()}
+
+    def _use_weightclass_starting_elo(self) -> bool:
+        return bool(self.config.get("use_weightclass_starting_elo", True))
+
+    def _register_weightclass(self, weightclass: str | None) -> None:
+        if not self._use_weightclass_starting_elo():
+            return
+        if self.weightclass_key is not None:
+            return
+        key = normalize_weightclass_key(weightclass)
+        if key is None:
+            return
+        elo = starting_elo_for(key, overrides=self._weightclass_overrides())
+        if elo is None:
+            return
+        self.weightclass_key = key
+        self.elo_offset = elo
+
+    def set_weightclass(self, weightclass: str | None) -> str | None:
+        """Set division for a fighter with no bouts (hypothetical matchups)."""
+        self._register_weightclass(weightclass)
+        return self.weightclass_key
 
     def log_likelihood(self) -> float:
         """Computes the log likelihood of the fighter's ratings over all days.
@@ -167,14 +205,8 @@ class Fighter:
         for i in range(n - 2, -1, -1):
             x[i] = (y[i] - b[i] * x[i + 1]) / d[i]
 
-        new_r = [ri - xi for ri, xi in zip(r, x)]
-
-        for r in new_r:
-            if r > 650:
-                raise UnstableRatingException("unstable r on fighter")
-
         for idx, day in enumerate(self.days):
-            day.r = day.r - x[idx]
+            day.r = clamp_rating_r(day.r - x[idx])
 
     def covariance(self) -> npt.NDArray[np.float64]:
         """Computes the covariance matrix of the fighter's rating estimations.
@@ -256,7 +288,12 @@ class Fighter:
             new_pday = FD.FighterDay(self, fight.day)
             if len(self.days) == 0:
                 new_pday.is_first_day = True
-                new_pday.set_gamma(1)
+                self._register_weightclass(
+                    str(fight.extras["weightclass"])
+                    if fight.extras.get("weightclass") is not None
+                    else None
+                )
+                new_pday.set_gamma(1.0)
             else:
                 # still not perfect because gamma of day index can more farther if more fights were not added in order
                 new_pday.set_gamma(self.days[day_index - 1].gamma())

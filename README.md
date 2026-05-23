@@ -61,7 +61,7 @@ whr.create_fight("khabib", "poirier",  "one", 2, 3, 0)
 whr.create_fight("khabib", "gaethje",  "one", 3, 2, 0)
 ```
 
-### Outcome weights (method of victory)
+## Fitting Method of Victory Weights
 
 Wins are not all equal. Each fight uses a multiplier `c` on the method of victory when WHR updates ratings (higher = more rating movement through the history graph).
 
@@ -74,7 +74,7 @@ Wins are not all equal. Each fight uses a multiplier `c` on the method of victor
 | Unanimous decision | 3 | 1.0 (anchor) |
 | Split / majority decision | 1 | 1.0 |
 
-Search weights on held-out fights (train on past, predict forward; UD stays at 1.0):
+Search weights on held-out fights (train on past, predict forward; UD stays at 1.0). Four method-of-victory outcomes are defined in `fight_whr/outcome_weights.py` (`OUTCOME_TYPES`, keys 0–3); the fit script searches multipliers for KO, split, and submission while unanimous decision stays anchored at 1.0. Default grid: 10 candidate values per tunable outcome, evenly spaced from 0.7 to 2.7 (1,000 combinations), defined in `fight_whr/fit_outcome_weights.py` as `DEFAULT_WEIGHT_GRID_VALUES`. Override with `--ko`, `--split`, and `--submission`.
 
 ```bash
 python scripts/fit_outcome_weights.py --source local --iterations 30
@@ -256,14 +256,16 @@ python scripts/load_and_iterate.py --source auto
 
 ### Offline local snapshot
 
-The primary Cloud SQL query lives in [`fight_whr/data/sql/ufc_fight_data.sql`](fight_whr/data/sql/ufc_fight_data.sql). Export a parquet copy once while online:
+The primary Cloud SQL query lives in [`fight_whr/data/sql/ufc_fight_data.sql`](fight_whr/data/sql/ufc_fight_data.sql). 
+
+To save a local copy in order to work offline:
 
 ```bash
 python scripts/ensure_db.py
 python scripts/export_fights_snapshot.py
 ```
 
-Default output: `data/local/ufc_fights.parquet` (gitignored). Optional `--limit N` or `--output /path/to/file.parquet`.
+Default output: `data/local/ufc_fights.parquet` (gitignored). Optional `--limit N` (to limit amounts) or `--output /path/to/file.parquet` (to change destination).
 
 **Remote (Cloud SQL):**
 
@@ -281,8 +283,36 @@ python scripts/load_and_iterate.py --source local
 Use `--local-fights /path/to/ufc_fights.parquet` or set `MMA_WHR_LOCAL_FIGHTS_PATH` in `.env` for a custom snapshot path. Re-run `export_fights_snapshot.py` when you want fresh data from the database.
 
 
+## Weight-class debut Elo
+
+Fighters with no prior bouts in WHR use division-specific starting ratings when `use_weightclass_starting_elo` is enabled (default). Labels come from fight `weightclass` in the data (or `set_fighter_weightclass` / `probability_future_match(..., weightclass1=..., weightclass2=...)` for hypotheticals).
+
+| Key | Division | Debut Elo |
+|-----|----------|-----------|
+| HW | Heavyweight | 1900 |
+| LHW | Light heavyweight | 1800 |
+| MW | Middleweight | 1750 |
+| WW | Welterweight | 1700 |
+| LW | Lightweight | 1500 |
+| FW | Featherweight | 1450 |
+| BW | Bantamweight | 1400 |
+| FLW | Flyweight | 1300 |
+| WBW | Women's bantamweight | 800 |
+| WFLW | Women's flyweight | 600 |
+| WSW | Women's strawweight | 550 |
+
+Mappings and aliases live in `fight_whr/weightclass_elo.py`. Unknown divisions keep the legacy prior (Elo 0, gamma 1). Override via `Base(config={"weightclass_starting_elo": {"LW": 1550}})`.
+
+When loading fights, each fighter gets a permanent **division Elo floor** (`elo_offset` from the table above). WHR only moves them above/below that floor (`internal_elo` from `r`). Reported Elo = offset + internal movement, so women's divisions (550–800) stay below men's (1300–1900) in global lists unless fight history moves them a lot within their tier. Hypothetical matchups with no bouts use the table floor directly.
+
+```python
+whr = Base()
+whr.set_fighter_weightclass("Prospect", "Lightweight")
+elo = whr.debut_elo_for_weightclass("Heavyweight")  # 1900
+p_a, p_b = whr.probability_future_match("Prospect", "vet", weightclass1="Lightweight")
+```
+
 ## Upcoming Changes
-- Different starting values based on fighter weightclass
 - Larger variance in score to reflect uncertainty
 - Using gambling odds as a handicap
 - Progressive train/test environments

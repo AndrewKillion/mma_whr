@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
+import pandas as pd
 from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
-import pandas as pd
+import pandas as pdb
 from pydantic import BaseModel
 
 from fight_whr.data.db import check_connection, get_connection
