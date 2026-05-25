@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import re
-import pandas as pd
 from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
-import pandas as pdb
+import pandas as pd
 from pydantic import BaseModel
 
 from fight_whr.data.db import check_connection, get_connection
@@ -19,16 +18,26 @@ from fight_whr.data.local_snapshot import (
 
 Source = Literal["auto", "postgres", "gcs", "local"]
 
+FIGHT_TABLE_SCHEMA = "staging"
+FIGHT_TABLE_NAME = "stg_ufc_data__fight_data_dim"
+FIGHT_TABLE = (FIGHT_TABLE_SCHEMA, FIGHT_TABLE_NAME)
+FIGHT_SQL_FILE = "stg_ufc_data__fight_data_dim.sql"
+
+# Standard codes from staging.stg_ufc_data__fight_data_dim._method
+STANDARD_METHOD_CODES: dict[str, str] = {
+    "TKO": "KO",
+    "KO": "KO",
+    "SUB": "Submission",
+    "U_D": "Unanimous",
+    "D_U": "Unanimous",
+    "S_D": "Split",
+    "D_S": "Split",
+}
+
 METHOD_PATTERN = re.compile(
-    r"KO|TKO|Submission|Unanimous|Majority|Split|Doctor",
+    r"KO|TKO|Submission|Unanimous|Majority|Split|Doctor|SUB|U_D|D_U|S_D|D_S",
     re.IGNORECASE,
 )
-
-CANDIDATE_TABLES = [
-    ("raw", "ufc_fight_data"),
-    ("raw", "fight_data_total_ufcstats"),
-    ("public", "fight_data_total_ufcstats"),
-]
 
 
 class FightRow(BaseModel):
@@ -44,17 +53,25 @@ class FightRow(BaseModel):
 def normalize_method(method: str | None) -> str | None:
     if method is None or (isinstance(method, float) and pd.isna(method)):
         return None
-    m = str(method).strip()
-    if not m or not METHOD_PATTERN.search(m):
+    text = str(method).strip()
+    if not text:
         return None
-    upper = m.upper()
+    code = text.upper().replace(" ", "_").replace("-", "_")
+    if code == "OTH":
+        return None
+    mapped = STANDARD_METHOD_CODES.get(code)
+    if mapped is not None:
+        return mapped
+    if not METHOD_PATTERN.search(text):
+        return None
+    upper = text.upper()
     if re.search(r"KO|TKO|DOCTOR", upper):
         return "KO"
-    if "SUBMISSION" in upper:
+    if "SUB" in upper or "SUBMISSION" in upper:
         return "Submission"
-    if "SPLIT" in upper or "MAJORITY" in upper:
+    if "SPLIT" in upper or "MAJORITY" in upper or code in ("S_D", "D_S"):
         return "Split"
-    if "UNANIMOUS" in upper:
+    if "UNANIMOUS" in upper or code in ("U_D", "D_U"):
         return "Unanimous"
     return None
 
@@ -71,7 +88,7 @@ def method_to_outcome(method: str) -> int:
 
 def _method_column(columns: list[str]) -> str | None:
     lower = {c.lower(): c for c in columns}
-    for name in ("method", "mov"):
+    for name in ("method", "mov", "_method"):
         if name in lower:
             return lower[name]
     return None
@@ -95,7 +112,7 @@ def _normalize_weightclass(value: Any) -> str | None:
 def _rows_from_dataframe(df: pd.DataFrame) -> list[FightRow]:
     method_col = _method_column(list(df.columns))
     if method_col is None:
-        raise ValueError("No method/mov column in fight data")
+        raise ValueError("No method/_method/mov column in fight data")
 
     df = df.copy()
     df["fighter_a"] = df["fighter_a"].astype(str).str.strip()
@@ -138,64 +155,29 @@ def _load_sql_file(name: str) -> str:
     return path.read_text()
 
 
-def _find_fight_table(conn) -> tuple[str, str] | None:
+def _assert_fight_table_exists(conn) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT table_schema, table_name
+            SELECT 1
             FROM information_schema.tables
-            WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-              AND (
-                table_name = 'ufc_fight_data'
-                OR table_name ILIKE '%fight%total%'
-                OR table_name = 'fight_data_total_ufcstats'
-              )
-            ORDER BY table_schema, table_name
-            """
+            WHERE table_schema = %s AND table_name = %s
+            """,
+            (FIGHT_TABLE_SCHEMA, FIGHT_TABLE_NAME),
         )
-        found = {(s, t) for s, t in cur.fetchall()}
-
-    for candidate in CANDIDATE_TABLES:
-        if candidate in found:
-            return candidate
-    return next(iter(found), None) if found else None
+        if cur.fetchone() is None:
+            raise LookupError(
+                f"Fight view not found: {FIGHT_TABLE_SCHEMA}.{FIGHT_TABLE_NAME}. "
+                "Check CLOUD_SQL_USER can read staging."
+            )
 
 
 def fetch_fight_dataframe_from_postgres(limit: int | None = None) -> pd.DataFrame:
     check_connection()
     conn = get_connection()
     try:
-        table = _find_fight_table(conn)
-        if table is None:
-            raise LookupError("No fight table found in Cloud SQL")
-        schema, name = table
-
-        if table == ("raw", "ufc_fight_data"):
-            sql = _load_sql_file("ufc_fight_data.sql")
-        else:
-            method_col = "method"
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT column_name FROM information_schema.columns
-                    WHERE table_schema = %s AND table_name = %s
-                    """,
-                    (schema, name),
-                )
-                col_names = [r[0] for r in cur.fetchall()]
-                cols = {c.lower() for c in col_names}
-                if "mov" in cols and "method" not in cols:
-                    method_col = "mov"
-            date_col = "fight_date" if "fight_date" in cols else "date"
-            wc_col = _weightclass_column(col_names)
-            wc_select = f", {wc_col} AS weightclass" if wc_col else ""
-            sql = f"""
-                SELECT fighter_a, fighter_b, {date_col} AS date, winner, {method_col} AS method{wc_select}
-                FROM {schema}.{name}
-                WHERE {date_col} IS NOT NULL
-                ORDER BY {date_col}
-            """
-
+        _assert_fight_table_exists(conn)
+        sql = _load_sql_file(FIGHT_SQL_FILE)
         if limit is not None:
             sql = sql.rstrip().rstrip(";") + f" LIMIT {int(limit)}"
         return pd.read_sql(sql, conn)

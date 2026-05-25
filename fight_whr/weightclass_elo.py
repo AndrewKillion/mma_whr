@@ -5,17 +5,17 @@ import re
 
 # Canonical division keys → debut Elo for fighters with no WHR history yet.
 STARTING_ELO_BY_KEY: dict[str, float] = {
-    "HW": 1900.0,
-    "LHW": 1800.0,
-    "MW": 1750.0,
-    "WW": 1700.0,
+    "HW": 1500.0,
+    "LHW": 1500.0,
+    "MW": 1500.0,
+    "WW": 1500.0,
     "LW": 1500.0,
-    "FW": 1450.0,
-    "BW": 1400.0,
-    "FLW": 1300.0,
-    "WBW": 800.0,
-    "WFLW": 600.0,
-    "WSW": 550.0,
+    "FW": 1500.0,
+    "BW": 1500.0,
+    "FLW": 1500.0,
+    "WBW": 1500.0,
+    "WFLW": 1500.0,
+    "WSW": 1500.0,
 }
 
 # Women's featherweight (not in original table; between WSW and WBW).

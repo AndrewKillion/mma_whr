@@ -9,7 +9,7 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCAL_FIGHTS_PATH = REPO_ROOT / "data" / "local" / "ufc_fights.parquet"
-SQL_PATH = Path(__file__).resolve().parent / "sql" / "ufc_fight_data.sql"
+SQL_PATH = Path(__file__).resolve().parent / "sql" / "stg_ufc_data__fight_data_dim.sql"
 
 
 def resolve_local_fights_path(path: str | Path | None = None) -> Path:

@@ -16,9 +16,12 @@ from fight_whr.outcome_weights import (
 )
 
 
-def test_neutral_defaults_all_one() -> None:
-    assert DEFAULT_OUTCOME_WEIGHTS == NEUTRAL_OUTCOME_WEIGHTS
-    assert all(v == 1.0 for v in DEFAULT_OUTCOME_WEIGHTS.values())
+def test_default_outcome_weights_match_prior_guess() -> None:
+    assert DEFAULT_OUTCOME_WEIGHTS == PRIOR_GUESS_OUTCOME_WEIGHTS
+
+
+def test_neutral_outcome_weights() -> None:
+    assert NEUTRAL_OUTCOME_WEIGHTS[3] == 1.0
 
 
 def test_anchor_outcome_weights() -> None:
