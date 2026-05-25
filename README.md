@@ -91,6 +91,27 @@ whr = Base(config={"outcome_weights": weights})
 
 Or pass a JSON file to `scripts/load_and_iterate.py` with `--outcome-weights path/to/weights.json` (keys `0`–`3`; values are rescaled so key `3` = 1.0).
 
+### Export rankings to a DataFrame
+
+Run WHR and save a table (`fighter_name`, `current_score`, `current_weightclass`, `last_fight_date`):
+
+```bash
+python scripts/export_rankings.py --source local --iterations 50
+```
+
+Default output: `data/local/whr_rankings.parquet`. Use `--output path.csv` for CSV.
+
+Explore in Python:
+
+```python
+import pandas as pd
+
+df = pd.read_parquet("data/local/whr_rankings.parquet")
+df.query("current_weightclass.str.contains('WOMEN', case=False, na=False)").head()
+```
+
+Or build in memory: `from fight_whr.rankings import load_and_fit_whr, rankings_dataframe`.
+
 ### Get Quick Info in the Terminal
 
 By default the loader pulls **all** fights (no `LIMIT`). Use `--limit N` only for a smaller slice (oldest N by `fight_date`).
@@ -252,11 +273,11 @@ python scripts/load_and_iterate.py --source postgres
 python scripts/load_and_iterate.py --source auto
 ```
 
-`--source` is `auto` (Postgres then GCS fallback), `postgres`, `gcs`, or `local`. Fights use `fighter_a`, `fighter_b`, `date`, `winner`, and method of victory.
+`--source` is `auto` (Postgres then GCS fallback), `postgres`, `gcs`, or `local`. Fights are loaded from **`staging.stg_ufc_data__fight_data_dim`** (`fighter_a`, `fighter_b`, `fight_date`, `winner`, `_method`, `weightclass`). Method codes: `TKO` → KO, `SUB` → submission, `D_U`/`U_D` → unanimous, `D_S`/`S_D` → split; `OTH`, draws, and no-contests are excluded.
 
 ### Offline local snapshot
 
-The primary Cloud SQL query lives in [`fight_whr/data/sql/ufc_fight_data.sql`](fight_whr/data/sql/ufc_fight_data.sql). 
+The primary Cloud SQL query lives in [`fight_whr/data/sql/stg_ufc_data__fight_data_dim.sql`](fight_whr/data/sql/stg_ufc_data__fight_data_dim.sql). 
 
 To save a local copy in order to work offline:
 
